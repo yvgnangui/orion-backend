@@ -1,0 +1,28 @@
+version: "3.8"
+services:
+  db:
+    image: postgres:16-alpine
+    restart: always
+    environment:
+      POSTGRES_USER: orion
+      POSTGRES_PASSWORD: orion
+      POSTGRES_DB: orion
+    ports:
+      - "5432:5432"
+    volumes:
+      - orion_db_data:/var/lib/postgresql/data
+
+  backend:
+    build: .
+    restart: always
+    depends_on:
+      - db
+    environment:
+      DATABASE_URL: "postgresql://orion:orion@db:5432/orion"
+      JWT_SECRET: "changez-moi-en-production"
+      FRONTEND_URL: "*"
+    ports:
+      - "3000:3000"
+
+volumes:
+  orion_db_data:
