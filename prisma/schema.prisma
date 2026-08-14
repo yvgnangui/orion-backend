@@ -22,6 +22,14 @@ enum Categorie {
   DISTRIBUTEUR
 }
 
+enum CategorieTaille {
+  TRES_GROS
+  GROS
+  MOYEN
+  PETIT
+  TRES_PETIT
+}
+
 enum ModePaiement {
   ESPECE
   VERSEMENT
@@ -56,6 +64,7 @@ model Client {
   type                        ClientType
   nomRaisonSociale            String
   categorie                   Categorie
+  categorieTaille             CategorieTaille?
   dfe                         String?
   rccm                        String?
   localisation                String?
@@ -102,6 +111,8 @@ model Commande {
   dateLivraisonPlanifiee  DateTime?
   dateLivraisonConfirmee  DateTime?
   modePaiement            ModePaiement
+  credit                  Float?
+  delaiPaiementJours      Int?
   montantTotalHt          Float
   montantTva              Float
   montantTotalTtc         Float
