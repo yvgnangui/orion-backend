@@ -1,6 +1,28 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
+// Seuils de catégorisation par potentiel mensuel (tonnes) et majoration de prix associée.
+function categoriserClient(client: { categorieTaille?: string | null; potentielMensuelTonnes?: number | null }) {
+  if (client.categorieTaille) return client.categorieTaille; // choix manuel prioritaire
+  const p = client.potentielMensuelTonnes ?? 0;
+  if (p >= 50) return 'TRES_GROS';
+  if (p >= 20) return 'GROS';
+  if (p >= 10) return 'MOYEN';
+  if (p >= 5) return 'PETIT';
+  return 'TRES_PETIT';
+}
+
+function majorationParCategorie(categorie: string): number {
+  const majorations: Record<string, number> = {
+    TRES_GROS: 0,
+    GROS: 0,
+    MOYEN: 250,
+    PETIT: 500,
+    TRES_PETIT: 1000,
+  };
+  return majorations[categorie] ?? 0;
+}
+
 @Injectable()
 export class CommandesService {
   constructor(private prisma: PrismaService) {}
@@ -18,7 +40,14 @@ export class CommandesService {
     creeParId: number;
     lignes: { produitId: number; quantite: number }[];
     preuveFichierUrl?: string;
+    credit?: number;
+    delaiPaiementJours?: number;
   }) {
+    const client = await this.prisma.client.findUnique({ where: { id: data.clientId } });
+    if (!client) throw new BadRequestException('Client introuvable.');
+    const categorie = categoriserClient(client);
+    const majoration = majorationParCategorie(categorie);
+
     const produits = await this.prisma.produit.findMany({
       where: { id: { in: data.lignes.map((l) => l.produitId) } },
     });
@@ -28,13 +57,14 @@ export class CommandesService {
     const lignesData = data.lignes.map((l) => {
       const produit = produits.find((p) => p.id === l.produitId);
       if (!produit) throw new BadRequestException('Produit introuvable.');
-      const sousTotal = produit.prixUnitaire * l.quantite;
+      const prixApplique = produit.prixUnitaire + majoration;
+      const sousTotal = prixApplique * l.quantite;
       montantTotalHt += sousTotal;
       montantTva += (sousTotal * produit.tauxTva) / 100;
       return {
         produitId: produit.id,
         quantite: l.quantite,
-        prixUnitaireApplique: produit.prixUnitaire,
+        prixUnitaireApplique: prixApplique,
         sousTotal,
       };
     });
@@ -45,6 +75,8 @@ export class CommandesService {
         creeParId: data.creeParId,
         modePaiement: data.modePaiement as any,
         statut: 'EN_ATTENTE_VALIDATION',
+        credit: data.credit,
+        delaiPaiementJours: data.delaiPaiementJours,
         montantTotalHt,
         montantTva,
         montantTotalTtc: montantTotalHt + montantTva,
@@ -55,6 +87,23 @@ export class CommandesService {
       },
       include: { lignes: true, preuves: true },
     });
+  }
+
+  // Niveau 1 uniquement : modifier une commande (avant facturation).
+  async update(id: number, data: any) {
+    const commande = await this.getOrThrow(id);
+    if (commande.statut === 'FACTUREE') {
+      throw new BadRequestException('Une commande déjà facturée ne peut plus être modifiée.');
+    }
+    return this.prisma.commande.update({ where: { id }, data });
+  }
+
+  // Niveau 1 uniquement : supprimer une commande.
+  async remove(id: number) {
+    await this.getOrThrow(id);
+    await this.prisma.commandeLigne.deleteMany({ where: { commandeId: id } });
+    await this.prisma.preuvePaiement.deleteMany({ where: { commandeId: id } });
+    return this.prisma.commande.delete({ where: { id } });
   }
 
   // Étape 2 du workflow : Niveau 1 valide la commande + planifie la livraison.
