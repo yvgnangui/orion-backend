@@ -12,4 +12,4 @@ COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/prisma ./prisma
 EXPOSE 3000
-CMD CMD npx prisma db push --accept-data-loss && node dist/main
+CMD npx prisma db push --accept-data-loss && node dist/main
