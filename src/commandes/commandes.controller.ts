@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Patch, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Post, Patch, Req, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard, RolesGuard, Roles } from '../auth/guards';
 import { CommandesService } from './commandes.service';
 
@@ -30,5 +30,19 @@ export class CommandesController {
   @Patch(':id/confirmer-livraison')
   confirmerLivraison(@Param('id') id: string, @Req() req: any) {
     return this.commandesService.confirmerLivraison(Number(id), req.user.id);
+  }
+
+  // Modifier une commande — réservé Niveau 1.
+  @Roles('NIVEAU_1')
+  @Patch(':id')
+  update(@Param('id') id: string, @Body() data: any) {
+    return this.commandesService.update(Number(id), data);
+  }
+
+  // Supprimer une commande — réservé Niveau 1.
+  @Roles('NIVEAU_1')
+  @Delete(':id')
+  remove(@Param('id') id: string) {
+    return this.commandesService.remove(Number(id));
   }
 }
