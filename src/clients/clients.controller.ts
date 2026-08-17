@@ -19,7 +19,20 @@ export class ClientsController {
   findOne(@Param('id') id: string) {
     return this.prisma.client.findUnique({
       where: { id: Number(id) },
-      include: { commandes: true, produitPredilection: true },
+      include: {
+        produitPredilection: true,
+        commandes: {
+          orderBy: { dateCreation: 'desc' },
+          include: {
+            lignes: {
+              include: {
+                produit: true,
+                retraits: { include: { preuves: true } },
+              },
+            },
+          },
+        },
+      },
     });
   }
 

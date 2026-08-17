@@ -12,37 +12,66 @@ export class CommandesController {
     return this.commandesService.findAll();
   }
 
-  // Étape 1 : Niveau 1 ou 2 crée la commande + preuve de paiement.
+  @Get(':id')
+  findOne(@Param('id') id: string) {
+    return this.commandesService.findOne(Number(id));
+  }
+
+  // Création du bon de commande — Niveau 1 ou 2.
   @Post()
   create(@Body() data: any, @Req() req: any) {
     return this.commandesService.create({ ...data, creeParId: req.user.id });
   }
 
-  // Étape 2 : réservé Niveau 1.
+  // Validation du bon de commande — réservé Niveau 1.
   @Roles('NIVEAU_1')
   @Patch(':id/valider')
-  valider(@Param('id') id: string, @Body('dateLivraisonPlanifiee') date: string, @Req() req: any) {
-    return this.commandesService.valider(Number(id), req.user.id, new Date(date));
+  validerBon(@Param('id') id: string, @Req() req: any) {
+    return this.commandesService.validerBon(Number(id), req.user.id);
   }
 
-  // Étape 3 : réservé Niveau 1.
-  @Roles('NIVEAU_1')
-  @Patch(':id/confirmer-livraison')
-  confirmerLivraison(@Param('id') id: string, @Req() req: any) {
-    return this.commandesService.confirmerLivraison(Number(id), req.user.id);
-  }
-
-  // Modifier une commande — réservé Niveau 1.
   @Roles('NIVEAU_1')
   @Patch(':id')
   update(@Param('id') id: string, @Body() data: any) {
     return this.commandesService.update(Number(id), data);
   }
 
-  // Supprimer une commande — réservé Niveau 1.
   @Roles('NIVEAU_1')
   @Delete(':id')
   remove(@Param('id') id: string) {
     return this.commandesService.remove(Number(id));
+  }
+
+  // --- Retraits ---
+
+  // Enregistrement d'un retrait — Niveau 1 ou 2. En attente de validation Niveau 1.
+  @Post('retraits')
+  creerRetrait(@Body() data: any, @Req() req: any) {
+    return this.commandesService.creerRetrait({ ...data, creeParId: req.user.id });
+  }
+
+  // Validation du retrait — réservé Niveau 1. Déduit la quantité du bon de commande.
+  @Roles('NIVEAU_1')
+  @Patch('retraits/:id/valider')
+  validerRetrait(@Param('id') id: string, @Req() req: any) {
+    return this.commandesService.validerRetrait(Number(id), req.user.id);
+  }
+
+  @Roles('NIVEAU_1')
+  @Patch('retraits/:id/confirmer-livraison')
+  confirmerLivraisonRetrait(@Param('id') id: string, @Req() req: any) {
+    return this.commandesService.confirmerLivraisonRetrait(Number(id), req.user.id);
+  }
+
+  @Roles('NIVEAU_1')
+  @Patch('retraits/:id/facturer')
+  facturerRetrait(@Param('id') id: string) {
+    return this.commandesService.facturerRetrait(Number(id));
+  }
+
+  @Roles('NIVEAU_1')
+  @Patch('retraits/:id/paiement')
+  enregistrerPaiement(@Param('id') id: string, @Body('montantPaye') montantPaye: number) {
+    return this.commandesService.enregistrerPaiementRetrait(Number(id), montantPaye);
   }
 }

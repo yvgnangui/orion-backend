@@ -38,12 +38,30 @@ enum ModePaiement {
   MOBILE_MONEY_GMA
 }
 
-enum StatutCommande {
+// Statut du bon de commande global (l'engagement du client sur une quantité totale).
+enum StatutBonCommande {
   EN_ATTENTE_VALIDATION
-  VALIDEE_ATTENTE_LIVRAISON
-  LIVREE
-  FACTUREE
-  ANNULEE
+  VALIDE
+  EN_COURS
+  TERMINE
+  ANNULE
+}
+
+// Statut de chaque retrait individuel (une venue du client pour une partie de son bon de commande).
+enum StatutRetrait {
+  EN_ATTENTE_VALIDATION
+  VALIDE
+  LIVRE
+  FACTURE
+  ANNULE
+}
+
+enum CategorieDepense {
+  ACHAT_MARCHANDISE
+  TRANSPORT
+  SALAIRES
+  LOYER
+  AUTRE
 }
 
 model Compte {
@@ -56,7 +74,10 @@ model Compte {
 
   commandesCreees   Commande[] @relation("CreePar")
   commandesValidees Commande[] @relation("ValidePar")
-  commandesLivrees  Commande[] @relation("LivreConfirmePar")
+  retraitsCrees     Retrait[]  @relation("RetraitCreePar")
+  retraitsValides   Retrait[]  @relation("RetraitValidePar")
+  retraitsLivres    Retrait[]  @relation("RetraitLivreConfirmePar")
+  depensesSaisies   Depense[]  @relation("DepenseSaisiePar")
 }
 
 model Client {
@@ -85,57 +106,103 @@ model Client {
 }
 
 model Produit {
-  id            Int      @id @default(autoincrement())
-  nom           String
-  prixUnitaire  Float
-  unite         String
-  tauxTva       Float    @default(9)
-  actif         Boolean  @default(true)
+  id             Int      @id @default(autoincrement())
+  nom            String
+  prixAchat      Float    @default(0)
+  prixUnitaire   Float
+  unite          String
+  tauxTva        Float    @default(9)
+  actif          Boolean  @default(true)
 
   clients Client[]
   lignes  CommandeLigne[]
 }
 
+// Le "bon de commande" : l'engagement global du client, avant tout retrait.
 model Commande {
-  id                     Int             @id @default(autoincrement())
-  clientId               Int
-  client                 Client          @relation(fields: [clientId], references: [id])
-  creeParId              Int?
-  creePar                Compte?         @relation("CreePar", fields: [creeParId], references: [id])
-  valideParId            Int?
-  validePar              Compte?         @relation("ValidePar", fields: [valideParId], references: [id])
-  livreConfirmeParId     Int?
-  livreConfirmePar       Compte?         @relation("LivreConfirmePar", fields: [livreConfirmeParId], references: [id])
-  statut                 StatutCommande  @default(EN_ATTENTE_VALIDATION)
-  dateCreation            DateTime       @default(now())
-  dateLivraisonPlanifiee  DateTime?
-  dateLivraisonConfirmee  DateTime?
-  modePaiement            ModePaiement
-  credit                  Float?
-  delaiPaiementJours      Int?
-  montantTotalHt          Float
-  montantTva              Float
-  montantTotalTtc         Float
+  id                Int               @id @default(autoincrement())
+  clientId          Int
+  client            Client            @relation(fields: [clientId], references: [id])
+  creeParId         Int?
+  creePar           Compte?           @relation("CreePar", fields: [creeParId], references: [id])
+  valideParId       Int?
+  validePar         Compte?           @relation("ValidePar", fields: [valideParId], references: [id])
+  statut            StatutBonCommande @default(EN_ATTENTE_VALIDATION)
+  dateCreation      DateTime          @default(now())
+  dateValidation    DateTime?
+  modePaiement      ModePaiement
+  credit            Float?
+  delaiPaiementJours Int?
 
-  lignes  CommandeLigne[]
+  lignes CommandeLigne[]
+}
+
+// Une ligne du bon de commande : un produit, une quantité totale engagée.
+model CommandeLigne {
+  id                       Int      @id @default(autoincrement())
+  commandeId               Int
+  commande                 Commande @relation(fields: [commandeId], references: [id])
+  produitId                Int
+  produit                  Produit  @relation(fields: [produitId], references: [id])
+  quantiteTotale           Float
+  prixUnitaireApplique     Float
+  quantiteRetireeCumulee   Float    @default(0)
+
+  retraits Retrait[]
+}
+
+// Un retrait : une venue du client pour une partie de la quantité engagée sur une ligne.
+// Chaque retrait est validé individuellement par le Niveau 1 avant d'être enregistré comme définitif.
+model Retrait {
+  id                     Int           @id @default(autoincrement())
+  commandeLigneId        Int
+  commandeLigne          CommandeLigne @relation(fields: [commandeLigneId], references: [id])
+  quantite               Float
+  montantHt              Float
+  montantTva             Float
+  montantTotalTtc        Float
+  montantPaye            Float         @default(0)
+  statut                 StatutRetrait @default(EN_ATTENTE_VALIDATION)
+  creeParId              Int?
+  creePar                Compte?       @relation("RetraitCreePar", fields: [creeParId], references: [id])
+  valideParId            Int?
+  validePar              Compte?       @relation("RetraitValidePar", fields: [valideParId], references: [id])
+  livreConfirmeParId     Int?
+  livreConfirmePar       Compte?       @relation("RetraitLivreConfirmePar", fields: [livreConfirmeParId], references: [id])
+  dateCreation           DateTime      @default(now())
+  dateValidation         DateTime?
+  dateLivraisonConfirmee DateTime?
+
   preuves PreuvePaiement[]
 }
 
-model CommandeLigne {
-  id                    Int      @id @default(autoincrement())
-  commandeId            Int
-  commande              Commande @relation(fields: [commandeId], references: [id])
-  produitId             Int
-  produit               Produit  @relation(fields: [produitId], references: [id])
-  quantite              Float
-  prixUnitaireApplique  Float
-  sousTotal             Float
+model PreuvePaiement {
+  id         Int      @id @default(autoincrement())
+  retraitId  Int
+  retrait    Retrait  @relation(fields: [retraitId], references: [id])
+  fichierUrl String
+  uploadedAt DateTime @default(now())
 }
 
-model PreuvePaiement {
-  id          Int      @id @default(autoincrement())
-  commandeId  Int
-  commande    Commande @relation(fields: [commandeId], references: [id])
-  fichierUrl  String
-  uploadedAt  DateTime @default(now())
+// Dépenses saisies par le Niveau 1, pour un état financier réel (TVA déductible incluse).
+model Depense {
+  id             Int              @id @default(autoincrement())
+  categorie      CategorieDepense
+  libelle        String
+  montant        Float
+  tvaDeductible  Float            @default(0)
+  fournisseur    String?
+  date           DateTime         @default(now())
+  justificatifUrl String?
+  saisieParId    Int?
+  saisiePar      Compte?          @relation("DepenseSaisiePar", fields: [saisieParId], references: [id])
+  createdAt      DateTime         @default(now())
+}
+
+// Objectif mensuel de vente (en tonnes), modifiable uniquement par le Niveau 1, visible par tous.
+model ObjectifMensuel {
+  id               Int      @id @default(autoincrement())
+  mois             DateTime @unique // toujours le 1er du mois concerné
+  quantiteTonnes   Float
+  updatedAt        DateTime @updatedAt
 }
